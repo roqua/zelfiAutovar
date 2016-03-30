@@ -1,0 +1,15 @@
+Package: zelfiAutovar
+Type: Package
+Title: Zelfi networks using Autovar
+Version: 1.0-0
+Date: 2016-03-30
+Authors@R: c(person("Ando","Emerencia",role = c("aut","cre"),
+    email = "ando.emerencia@gmail.com"))
+BugReports: https://github.com/roqua/zelfiAutovar/issues
+Maintainer: Ando Emerencia <ando.emerencia@gmail.com>
+Description: Make Zelfi networks using Autovar.
+License: MIT + file LICENSE
+Imports:
+    autovar,
+    psych,
+    stringr
