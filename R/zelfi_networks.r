@@ -294,7 +294,9 @@ generate_zelfi_networks <- function(data, timestamp, always_include = NULL, pair
 
 ## Script
 
-zelfi_networks <- function(answers) {
+zelfi_networks <- function(answers, type) {
+  # Type has to be 'denk' or 'doe'
+
   ## Constants
 
   IMPUTATION_ITERATIONS <-  30    # value times five = the number of iterations of imputation. E.g., 30x5 = 150 iterations.
@@ -311,74 +313,71 @@ zelfi_networks <- function(answers) {
 
 
   result <- NULL
-  types <- c('denk', 'doe')
-  for (type in types) {
-    subtype_data <- answers[[paste('zelfi_', type, sep = '')]]
-    subtype_data <- format_zelfi_data(subtype_data, type)
-    timestamp <- as.character(subtype_data$date_only_open_from[1])
-    column_labels <- if (type == 'doe') DOE_COLUMN_LABELS else DENK_COLUMN_LABELS
-    column_vars <- if (type == 'doe') DOE_COLUMN_VARS else DENK_COLUMN_VARS
-    active_vars <- if (type == 'doe') POSITIVE_AFFECT_ACTIVE_VARS else NEGATIVE_AFFECT_ACTIVE_VARS
-    deactive_vars <- if (type == 'doe') POSITIVE_AFFECT_DEACTIVE_VARS else NEGATIVE_AFFECT_DEACTIVE_VARS
-    affect_types <- if (type == 'doe')
-      c('positive_affect_active', 'positive_affect_deactive')
-    else
-      c('negative_affect_active', 'negative_affect_deactive')
+  subtype_data <- answers[[paste('zelfi_', type, sep = '')]]
+  subtype_data <- format_zelfi_data(subtype_data, type)
+  timestamp <- as.character(subtype_data$date_only_open_from[1])
+  column_labels <- if (type == 'doe') DOE_COLUMN_LABELS else DENK_COLUMN_LABELS
+  column_vars <- if (type == 'doe') DOE_COLUMN_VARS else DENK_COLUMN_VARS
+  active_vars <- if (type == 'doe') POSITIVE_AFFECT_ACTIVE_VARS else NEGATIVE_AFFECT_ACTIVE_VARS
+  deactive_vars <- if (type == 'doe') POSITIVE_AFFECT_DEACTIVE_VARS else NEGATIVE_AFFECT_DEACTIVE_VARS
+  affect_types <- if (type == 'doe')
+    c('positive_affect_active', 'positive_affect_deactive')
+  else
+    c('negative_affect_active', 'negative_affect_deactive')
 
-    # Impute once, before calling autovar
-    data_selection <- subtype_data[, c(column_vars, active_vars, deactive_vars)]
-    if (any(is.na(data_selection)))
-      data_selection <- impute_dataframe(data_selection, MEASUREMENTS_PER_DAY, IMPUTATION_ITERATIONS)
+  # Impute once, before calling autovar
+  data_selection <- subtype_data[, c(column_vars, active_vars, deactive_vars)]
+  if (any(is.na(data_selection)))
+    data_selection <- impute_dataframe(data_selection, MEASUREMENTS_PER_DAY, IMPUTATION_ITERATIONS)
 
-    # Add columns for active/deactive positive/negative vars
-    data_selection[[affect_types[1]]] <- rowMeans(data_selection[active_vars], na.rm = TRUE)
-    data_selection[[affect_types[1]]][which(is.nan(data_selection[[affect_types[1]]]))] <- NA
+  # Add columns for active/deactive positive/negative vars
+  data_selection[[affect_types[1]]] <- rowMeans(data_selection[active_vars], na.rm = TRUE)
+  data_selection[[affect_types[1]]][which(is.nan(data_selection[[affect_types[1]]]))] <- NA
 
-    data_selection[[affect_types[2]]] <- rowMeans(data_selection[deactive_vars], na.rm = TRUE)
-    data_selection[[affect_types[2]]][which(is.nan(data_selection[[affect_types[2]]]))] <- NA
+  data_selection[[affect_types[2]]] <- rowMeans(data_selection[deactive_vars], na.rm = TRUE)
+  data_selection[[affect_types[2]]][which(is.nan(data_selection[[affect_types[2]]]))] <- NA
 
-    for (i in 1:length(column_labels)) {
-      column_var <- column_vars[i]
-      data_formodel <- data_selection[, c(column_var, affect_types)]
-      gn <<- NULL
-      generate_zelfi_networks(
-        data_formodel,
-        timestamp = timestamp,
-        pick_best_of = affect_types,
-        incident_to_best_of = column_var,
-        pairs = NULL,
-        positive_variables = NULL,
-        negative_variables = NULL,
-        labels = list(),
-        measurements_per_day = MEASUREMENTS_PER_DAY,
-        max_network_size = 2,
-        second_significances = c(0.05, 0.01)
-      )
-      if (!is.null(gn)) {
-        print("Found a model for: ")
-        print(c(column_var, affect_types))
-        best_model <- gn$accepted_models[[1]]$varest
-        name_a <- best_model$vars[best_model$vars %in% affect_types]
-        label_a <- if (type == 'doe') 'positive_affect' else 'negative_affect'
-        name_b <- best_model$vars[!(best_model$vars %in% affect_types)]
-        label_b <- column_labels[name_b == column_vars]
-        if (apply_log_transform(best_model)) {
-          name_a <- paste('ln', name_a, sep = '')
-          name_b <- paste('ln', name_b, sep = '')
-        }
-        # Add a line to the result with the coefs of the best model
-        result <- c(result, list(
-          list(
-            name_a = name_a, label_a = label_a,
-            name_b = name_b, label_b = label_b,
-            model = best_model
-          )
-        ))
-      } else {
-        print("Did not find a model for: ")
-        print(c(column_var, affect_types))
-        # Don't add a line, simply skip
+  for (i in 1:length(column_labels)) {
+    column_var <- column_vars[i]
+    data_formodel <- data_selection[, c(column_var, affect_types)]
+    gn <<- NULL
+    generate_zelfi_networks(
+      data_formodel,
+      timestamp = timestamp,
+      pick_best_of = affect_types,
+      incident_to_best_of = column_var,
+      pairs = NULL,
+      positive_variables = NULL,
+      negative_variables = NULL,
+      labels = list(),
+      measurements_per_day = MEASUREMENTS_PER_DAY,
+      max_network_size = 2,
+      second_significances = c(0.05, 0.01)
+    )
+    if (!is.null(gn)) {
+      print("Found a model for: ")
+      print(c(column_var, affect_types))
+      best_model <- gn$accepted_models[[1]]$varest
+      name_a <- best_model$vars[best_model$vars %in% affect_types]
+      label_a <- if (type == 'doe') 'positive_affect' else 'negative_affect'
+      name_b <- best_model$vars[!(best_model$vars %in% affect_types)]
+      label_b <- column_labels[name_b == column_vars]
+      if (apply_log_transform(best_model)) {
+        name_a <- paste('ln', name_a, sep = '')
+        name_b <- paste('ln', name_b, sep = '')
       }
+      # Add a line to the result with the coefs of the best model
+      result <- c(result, list(
+        list(
+          name_a = name_a, label_a = label_a,
+          name_b = name_b, label_b = label_b,
+          model = best_model
+        )
+      ))
+    } else {
+      print("Did not find a model for: ")
+      print(c(column_var, affect_types))
+      # Don't add a line, simply skip
     }
   }
   result
