@@ -295,7 +295,6 @@ generate_zelfi_networks <- function(data, timestamp, always_include = NULL, pair
 ## Script
 
 zelfi_networks <- function(answers) {
-
   ## Constants
 
   IMPUTATION_ITERATIONS <-  30    # value times five = the number of iterations of imputation. E.g., 30x5 = 150 iterations.

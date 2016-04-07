@@ -9,7 +9,8 @@ BugReports: https://github.com/roqua/zelfiAutovar/issues
 Maintainer: Ando Emerencia <ando.emerencia@gmail.com>
 Description: Make Zelfi networks using Autovar.
 License: MIT + file LICENSE
+Depends:
+    autovar
 Imports:
-    autovar,
     psych,
     stringr
