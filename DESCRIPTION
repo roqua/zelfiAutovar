@@ -13,4 +13,5 @@ Depends:
     autovar
 Imports:
     psych,
-    stringr
+    stringr,
+    autovarCore
