@@ -172,16 +172,8 @@ generate_zelfi_networks <- function(data, timestamp, always_include = NULL, pair
   check_res <- autovar::check_config_integrity(net_cfg)
   if (!is.null(check_res))
     return(check_res)
-  #for (attempt in 2:(net_cfg$max_network_size)) {
-  attempt <- 2
   fail_safe <- FALSE
   number_of_columns <- net_cfg$max_network_size
-  if (attempt > 1) {
-    fail_safe <- TRUE
-    # attempt to generate networks for the initial network size (max_network_size) twice,
-    # once with balancing and once without.
-    number_of_columns <- net_cfg$max_network_size + 2 - attempt
-  }
   list_of_column_configs <- list()
   if (is.null(net_cfg$pick_best_of) || is.null(net_cfg$incident_to_best_of)) {
     list_of_column_configs <-
@@ -307,7 +299,7 @@ zelfi_networks <- function(answers, type) {
   # Impute once, before calling autovar
   data_selection <- subtype_data[, c(column_vars, active_vars, deactive_vars)]
   if (any(is.na(data_selection)))
-    data_selection <- impute_dataframe(data_selection, MEASUREMENTS_PER_DAY, IMPUTATION_ITERATIONS)
+    data_selection <- autovar::impute_dataframe(data_selection, MEASUREMENTS_PER_DAY, IMPUTATION_ITERATIONS)
 
   # Add columns for active/deactive positive/negative vars
   data_selection[[affect_types[1]]] <- rowMeans(data_selection[active_vars], na.rm = TRUE)
