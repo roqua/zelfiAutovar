@@ -9,8 +9,6 @@
 #' @param zelfi_data raw data frame containing the zelfi doe or zelfi denk data
 #' @param type string equal to "doe" for doe data or "denk" for denk data
 #' @return formatted zelfi data frame
-#' @examples format_zelfi_data(data$answers$zelfi_doe, "doe");
-#' format_zelfi_data(data$answers$zelfi_denk, "denk")
 #' @importFrom stringr str_c
 #' @export
 format_zelfi_data <- function(zelfi_data, type) {
@@ -73,13 +71,13 @@ select_relevant_columns2 <- function(data, net_cfg, failsafe = FALSE, number_of_
   if (!is.null(force_include))
     rnames <- c(rnames, force_include)
   remaining_columns <- all_columns
-  remaining_columns <- remove_from_vector(remaining_columns, force_include)
-  remaining_columns <- select_mssd_columns(remaining_columns, mssds)
+  remaining_columns <- autovar::remove_from_vector(remaining_columns, force_include)
+  remaining_columns <- autovar::select_mssd_columns(remaining_columns, mssds)
   if (length(remaining_columns) > 0) {
     df <- data.frame(data[, remaining_columns])
     colnames(df) <- remaining_columns
-    skews <- z_skewness_columns(df)
-    remaining_order <- order_by_quantity_unbalanced(remaining_columns, skews)
+    skews <- autovar::z_skewness_columns(df)
+    remaining_order <- autovar::order_by_quantity_unbalanced(remaining_columns, skews)
     rnames <- c(rnames, remaining_columns[remaining_order])
   } else {
     return(NULL)
@@ -152,7 +150,7 @@ generate_zelfi_networks <- function(data, timestamp, always_include = NULL, pair
     return("Timestamp argument is not a character string")
   if (nchar(timestamp) != 10)
     return("Wrong timestamp format, should be: yyyy-mm-dd")
-  net_cfg <- new_net_cfg()
+  net_cfg <- autovar::new_net_cfg()
   net_cfg$vars <- unique(names(data))
   net_cfg$timestamp <- timestamp
   net_cfg$always_include <- always_include
@@ -171,7 +169,7 @@ generate_zelfi_networks <- function(data, timestamp, always_include = NULL, pair
   if (!(max_network_size %in% 2:6))
     return("max_network_size needs to be in 2:6")
   net_cfg$max_network_size <- max_network_size
-  check_res <- check_config_integrity(net_cfg)
+  check_res <- autovar::check_config_integrity(net_cfg)
   if (!is.null(check_res))
     return(check_res)
   #for (attempt in 2:(net_cfg$max_network_size)) {
@@ -192,7 +190,7 @@ generate_zelfi_networks <- function(data, timestamp, always_include = NULL, pair
       ))
   } else {
     for (idx in 1:length(net_cfg$pick_best_of)) {
-      if (psych::mssd(data[,net_cfg$pick_best_of[[idx]]]) <= mssd_threshold()) {
+      if (psych::mssd(data[,net_cfg$pick_best_of[[idx]]]) <= autovar::mssd_threshold()) {
         list_of_column_configs <- c(list_of_column_configs, list(NULL))
         next
       }
@@ -222,12 +220,12 @@ generate_zelfi_networks <- function(data, timestamp, always_include = NULL, pair
       next
     }
     first_measurement_index <- 1
-    res <- select_relevant_rows(odata, timestamp, net_cfg)
+    res <- autovar::select_relevant_rows(odata, timestamp, net_cfg)
     odata <- res$data
     first_measurement_index <- res$first_measurement_index
     new_timestamp <- res$timestamp
     if (any(is.na(odata)))
-      odata <- impute_dataframe(odata, net_cfg$measurements_per_day)
+      odata <- autovar::impute_dataframe(odata, net_cfg$measurements_per_day)
     if (any(is.na(odata))) {
       new_list_of_column_configs <- c(new_list_of_column_configs, list(NULL))
       next # sometimes it fails
@@ -337,7 +335,7 @@ zelfi_networks <- function(answers, type) {
     if (!is.null(gn) && gn$bucket > 0) {
       best_model <- gn$varest
       vars <- names(best_model$varresult)
-      cat("Found a model for: ", paste(vars, collapse=', '), ". bucket: ", gn$bucket, "\n", sep='')
+      cat("Found a model for: ", paste(vars, collapse = ', '), ". bucket: ", gn$bucket, "\n", sep = '')
       name_a <- vars[vars %in% affect_types]
       label_a <- if (type == 'doe') 'positive_affect' else 'negative_affect'
       name_b <- vars[!(vars %in% affect_types)]
@@ -351,7 +349,7 @@ zelfi_networks <- function(answers, type) {
         )
       ))
     } else {
-      cat("Did not find a model for: ", paste(c(column_var, affect_types), collapse=', '), "\n", sep='')
+      cat("Did not find a model for: ", paste(c(column_var, affect_types), collapse = ', '), "\n", sep = '')
       # Don't add a line, simply skip
     }
   }
