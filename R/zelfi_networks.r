@@ -9,8 +9,6 @@
 #' @param zelfi_data raw data frame containing the zelfi doe or zelfi denk data
 #' @param type string equal to "doe" for doe data or "denk" for denk data
 #' @return formatted zelfi data frame
-#' @examples format_zelfi_data(data$answers$zelfi_doe, "doe");
-#' format_zelfi_data(data$answers$zelfi_denk, "denk")
 #' @importFrom stringr str_c
 #' @export
 format_zelfi_data <- function(zelfi_data, type) {
@@ -73,13 +71,13 @@ select_relevant_columns2 <- function(data, net_cfg, failsafe = FALSE, number_of_
   if (!is.null(force_include))
     rnames <- c(rnames, force_include)
   remaining_columns <- all_columns
-  remaining_columns <- remove_from_vector(remaining_columns, force_include)
-  remaining_columns <- select_mssd_columns(remaining_columns, mssds)
+  remaining_columns <- autovar::remove_from_vector(remaining_columns, force_include)
+  remaining_columns <- autovar::select_mssd_columns(remaining_columns, mssds)
   if (length(remaining_columns) > 0) {
     df <- data.frame(data[, remaining_columns])
     colnames(df) <- remaining_columns
-    skews <- z_skewness_columns(df)
-    remaining_order <- order_by_quantity_unbalanced(remaining_columns, skews)
+    skews <- autovar::z_skewness_columns(df)
+    remaining_order <- autovar::order_by_quantity_unbalanced(remaining_columns, skews)
     rnames <- c(rnames, remaining_columns[remaining_order])
   } else {
     return(NULL)
@@ -100,9 +98,9 @@ dynamic_graph_count <- function(varest, from_node, to_node) {
     i <- i + 1
     eqsum <- summary(equation)
     eqname <- var_names[[i]]
-    if (unprefix_ln(eqname) != to_node) next
+    if (eqname != to_node) next
     for (fromnodename in var_names) {
-      if (unprefix_ln(fromnodename) != from_node) next
+      if (fromnodename != from_node) next
       p_val <- eqsum$coefficients[paste(fromnodename, '.l1', sep = ""), 4]
       if (p_val > 0.05) next
       r <- r + 1
@@ -117,14 +115,14 @@ contemp_graph_count <- function(varest, from_node, to_node) {
   var_names <- names(res)
   i <- 0
   r <- 0
-  signmat <- significance_matrix(summary(varest))
+  signmat <- autovar::significance_matrix(summary(varest))
   n <- length(var_names)
   for (i in 1:(n - 1)) {
     eqname <- var_names[[i]]
-    if (unprefix_ln(eqname) != to_node && unprefix_ln(eqname) != from_node) next
+    if (eqname != to_node && eqname != from_node) next
     for (j in (i + 1):n) {
       fromnodename <- var_names[[j]]
-      if (unprefix_ln(fromnodename) != from_node && unprefix_ln(fromnodename) != to_node) next
+      if (fromnodename != from_node && fromnodename != to_node) next
       if (signmat[j * 2, i] > 0.05 || signmat[j * 2 - 1, i] == 0) next
       r <- r + 1
     }
@@ -152,7 +150,7 @@ generate_zelfi_networks <- function(data, timestamp, always_include = NULL, pair
     return("Timestamp argument is not a character string")
   if (nchar(timestamp) != 10)
     return("Wrong timestamp format, should be: yyyy-mm-dd")
-  net_cfg <- new_net_cfg()
+  net_cfg <- autovar::new_net_cfg()
   net_cfg$vars <- unique(names(data))
   net_cfg$timestamp <- timestamp
   net_cfg$always_include <- always_include
@@ -171,123 +169,96 @@ generate_zelfi_networks <- function(data, timestamp, always_include = NULL, pair
   if (!(max_network_size %in% 2:6))
     return("max_network_size needs to be in 2:6")
   net_cfg$max_network_size <- max_network_size
-  check_res <- check_config_integrity(net_cfg)
+  check_res <- autovar::check_config_integrity(net_cfg)
   if (!is.null(check_res))
     return(check_res)
-  for (attempt in 2:(net_cfg$max_network_size)) {
-    fail_safe <- FALSE
-    number_of_columns <- net_cfg$max_network_size
-    if (attempt > 1) {
-      fail_safe <- TRUE
-      # attempt to generate networks for the initial network size (max_network_size) twice,
-      # once with balancing and once without.
-      number_of_columns <- net_cfg$max_network_size + 2 - attempt
-    }
-    list_of_column_configs <- list()
-    if (is.null(net_cfg$pick_best_of) || is.null(net_cfg$incident_to_best_of)) {
-      list_of_column_configs <-
-        c(list_of_column_configs,list(
-          select_relevant_columns2(data,net_cfg, fail_safe, number_of_columns, log_level = 3)
-        ))
-    } else {
-      for (idx in 1:length(net_cfg$pick_best_of)) {
-        if (psych::mssd(data[,net_cfg$pick_best_of[[idx]]]) <= mssd_threshold()) {
-          list_of_column_configs <- c(list_of_column_configs, list(NULL))
-          next
-        }
-        force_include_var <- net_cfg$pick_best_of[[idx]]
-        force_exclude_vars <- net_cfg$pick_best_of[net_cfg$pick_best_of != force_include_var]
-        # below statement goes wrong if there is not at least TWO columns that are not force excluded (does not happen in current use)
-        filtered_data <- data[, !(names(data) %in% force_exclude_vars)]
-        list_of_column_configs <- c(list_of_column_configs, list(
-          select_relevant_columns2(
-            filtered_data,
-            net_cfg,
-            fail_safe,
-            number_of_columns,
-            log_level = 3,
-            force_include = force_include_var
-          )
-        ))
-      }
-    }
-
-    # Imputation + cutting rows part
-    new_list_of_column_configs <- list()
-    for (i in 1:length(list_of_column_configs)) {
-      odata <- list_of_column_configs[[i]]
-      if (is.null(odata)) {
-        new_list_of_column_configs <- c(new_list_of_column_configs, list(NULL))
+  fail_safe <- FALSE
+  number_of_columns <- net_cfg$max_network_size
+  list_of_column_configs <- list()
+  if (is.null(net_cfg$pick_best_of) || is.null(net_cfg$incident_to_best_of)) {
+    list_of_column_configs <-
+      c(list_of_column_configs,list(
+        select_relevant_columns2(data,net_cfg, fail_safe, number_of_columns, log_level = 3)
+      ))
+  } else {
+    for (idx in 1:length(net_cfg$pick_best_of)) {
+      if (psych::mssd(data[,net_cfg$pick_best_of[[idx]]]) <= autovar::mssd_threshold()) {
+        list_of_column_configs <- c(list_of_column_configs, list(NULL))
         next
       }
-      first_measurement_index <- 1
-      res <- select_relevant_rows(odata, timestamp, net_cfg)
-      odata <- res$data
-      first_measurement_index <- res$first_measurement_index
-      new_timestamp <- res$timestamp
-      if (any(is.na(odata)))
-        odata <- impute_dataframe(odata, net_cfg$measurements_per_day)
-      if (any(is.na(odata))) {
-        new_list_of_column_configs <- c(new_list_of_column_configs, list(NULL))
-        next # sometimes it fails
-      }
-      new_list_of_column_configs <- c(new_list_of_column_configs, list(
-        list(
-          timestamp = new_timestamp,
-          first_measurement_index = first_measurement_index,
-          data = odata
+      force_include_var <- net_cfg$pick_best_of[[idx]]
+      force_exclude_vars <- net_cfg$pick_best_of[net_cfg$pick_best_of != force_include_var]
+      # below statement goes wrong if there is not at least TWO columns that are not force excluded (does not happen in current use)
+      filtered_data <- data[, !(names(data) %in% force_exclude_vars)]
+      list_of_column_configs <- c(list_of_column_configs, list(
+        select_relevant_columns2(
+          filtered_data,
+          net_cfg,
+          fail_safe,
+          number_of_columns,
+          log_level = 3,
+          force_include = force_include_var
         )
       ))
     }
-    list_of_column_configs <- new_list_of_column_configs
+  }
 
-    # Loop over significances here
-    SIGNIFICANCES <- c(0.05, 0.01)
-    if (attempt > 1)
-      SIGNIFICANCES <- second_significances
-    for (signif in SIGNIFICANCES) {
-      best_graph <- NULL
-      most_incident_edges <- -1
-      for (idx in 1:length(list_of_column_configs)) {
-        column_config <- list_of_column_configs[[idx]]
-        if (is.null(column_config)) next
-        new_timestamp <- column_config$timestamp
-        ndata <- column_config$data
-        first_measurement_index <- column_config$first_measurement_index
+  # Imputation + cutting rows part
+  new_list_of_column_configs <- list()
+  for (i in 1:length(list_of_column_configs)) {
+    odata <- list_of_column_configs[[i]]
+    if (is.null(odata)) {
+      new_list_of_column_configs <- c(new_list_of_column_configs, list(NULL))
+      next
+    }
+    first_measurement_index <- 1
+    res <- autovar::select_relevant_rows(odata, timestamp, net_cfg)
+    odata <- res$data
+    first_measurement_index <- res$first_measurement_index
+    new_timestamp <- res$timestamp
+    if (any(is.na(odata)))
+      odata <- autovar::impute_dataframe(odata, net_cfg$measurements_per_day)
+    if (any(is.na(odata))) {
+      new_list_of_column_configs <- c(new_list_of_column_configs, list(NULL))
+      next # sometimes it fails
+    }
+    new_list_of_column_configs <- c(new_list_of_column_configs, list(
+      list(
+        timestamp = new_timestamp,
+        first_measurement_index = first_measurement_index,
+        data = odata
+      )
+    ))
+  }
+  list_of_column_configs <- new_list_of_column_configs
 
-        # Start Autovar procedure from here
-        d <- load_dataframe(ndata, net_cfg, log_level = 3)
-        d <- add_trend(d, log_level = 3)
-        d <- set_timestamps(d, date_of_first_measurement = new_timestamp,
-                            first_measurement_index = first_measurement_index,
-                            measurements_per_day = net_cfg$measurements_per_day,log_level = 3)
-        d <- var_main(d, names(ndata), significance = signif, log_level = 3,
-                      criterion = "BIC", include_squared_trend = TRUE,
-                      exclude_almost = TRUE, simple_models = TRUE,
-                      split_up_outliers = TRUE)
-        if (length(d$accepted_models) > 0) {
-          if (is.null(net_cfg$pick_best_of) || is.null(net_cfg$incident_to_best_of)) {
-            gn <<- d # save winning model
-            return(convert_to_graph(d, net_cfg))
-          }
-          current_graph <- convert_to_graph(d, net_cfg, forced_variable = net_cfg$pick_best_of[[idx]])
-          current_number_of_incident_edges <- my_number_of_edges(
-            d$accepted_models[[1]]$varest,
-            from_node = label_nodes(net_cfg$incident_to_best_of, net_cfg),
-            to_node = label_nodes(net_cfg$pick_best_of[[idx]], net_cfg)
-          )
-          if (current_number_of_incident_edges > most_incident_edges) {
-            gn <<- d # save winning model
-            most_incident_edges <- current_number_of_incident_edges
-            best_graph <- current_graph
-          }
-        }
+  best_model <- NULL
+  best_bucket <- -1
+  most_incident_edges <- -1
+  for (idx in 1:length(list_of_column_configs)) {
+    column_config <- list_of_column_configs[[idx]]
+    if (is.null(column_config)) next
+    ndata <- column_config$data
+    d <- autovarCore::autovar(raw_dataframe = ndata,
+                              selected_column_names = names(ndata),
+                              measurements_per_day = net_cfg$measurements_per_day,
+                              significance_levels = c(0.05, 0.01))
+    if (length(d) > 0) {
+      current_model <- d[[1]]
+      current_bucket <- current_model$bucket
+      current_number_of_incident_edges <- my_number_of_edges(
+        current_model$varest,
+        from_node = net_cfg$incident_to_best_of,
+        to_node = net_cfg$pick_best_of[[idx]]
+      )
+      if (current_bucket > best_bucket || (current_bucket == best_bucket && current_number_of_incident_edges > most_incident_edges)) {
+        most_incident_edges <- current_number_of_incident_edges
+        best_model <- current_model
+        best_bucket <- current_bucket
       }
-      if (!is.null(best_graph))
-        return(best_graph)
     }
   }
-  NULL
+  best_model
 }
 
 
@@ -328,7 +299,7 @@ zelfi_networks <- function(answers, type) {
   # Impute once, before calling autovar
   data_selection <- subtype_data[, c(column_vars, active_vars, deactive_vars)]
   if (any(is.na(data_selection)))
-    data_selection <- impute_dataframe(data_selection, MEASUREMENTS_PER_DAY, IMPUTATION_ITERATIONS)
+    data_selection <- autovar::impute_dataframe(data_selection, MEASUREMENTS_PER_DAY, IMPUTATION_ITERATIONS)
 
   # Add columns for active/deactive positive/negative vars
   data_selection[[affect_types[1]]] <- rowMeans(data_selection[active_vars], na.rm = TRUE)
@@ -340,8 +311,7 @@ zelfi_networks <- function(answers, type) {
   for (i in 1:length(column_labels)) {
     column_var <- column_vars[i]
     data_formodel <- data_selection[, c(column_var, affect_types)]
-    gn <<- NULL
-    generate_zelfi_networks(
+    gn <- generate_zelfi_networks(
       data_formodel,
       timestamp = timestamp,
       pick_best_of = affect_types,
@@ -354,18 +324,14 @@ zelfi_networks <- function(answers, type) {
       max_network_size = 2,
       second_significances = c(0.05, 0.01)
     )
-    if (!is.null(gn)) {
-      print("Found a model for: ")
-      print(c(column_var, affect_types))
-      best_model <- gn$accepted_models[[1]]$varest
-      name_a <- best_model$vars[best_model$vars %in% affect_types]
+    if (!is.null(gn) && gn$bucket > 0) {
+      best_model <- gn$varest
+      vars <- names(best_model$varresult)
+      cat("Found a model for: ", paste(vars, collapse = ', '), ". bucket: ", gn$bucket, "\n", sep = '')
+      name_a <- vars[vars %in% affect_types]
       label_a <- if (type == 'doe') 'positive_affect' else 'negative_affect'
-      name_b <- best_model$vars[!(best_model$vars %in% affect_types)]
+      name_b <- vars[!(vars %in% affect_types)]
       label_b <- column_labels[name_b == column_vars]
-      if (apply_log_transform(best_model)) {
-        name_a <- paste('ln', name_a, sep = '')
-        name_b <- paste('ln', name_b, sep = '')
-      }
       # Add a line to the result with the coefs of the best model
       result <- c(result, list(
         list(
@@ -375,8 +341,7 @@ zelfi_networks <- function(answers, type) {
         )
       ))
     } else {
-      print("Did not find a model for: ")
-      print(c(column_var, affect_types))
+      cat("Did not find a model for: ", paste(c(column_var, affect_types), collapse = ', '), "\n", sep = '')
       # Don't add a line, simply skip
     }
   }
